@@ -1,0 +1,165 @@
+---
+title: "STAT418 hw3"
+author: "Jixuan Li"
+date: "5/19/2017"
+output: html_document
+---
+
+This is the adult dataset (one for training and the other for testing). There are 15 variables, say, age, workclass, education, etc.
+```{r}
+library(data.table)
+library(curl)
+adult.train <- fread('https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data', sep=",", header=F, col.names=c('age','workclass','fnlwgt','education','EducationNo','MaritalStatus','occupation','relationship','race','sex','CapitalGain','CapitalLoss','HoursPerWeek','NativeCountry','salary'), fill=FALSE, strip.white=T)
+adult.test <- read.table("adult.test.txt", sep=",", header=F, col.names=c('age','workclass','fnlwgt','education','EducationNo','MaritalStatus','occupation','relationship','race','sex','CapitalGain','CapitalLoss','HoursPerWeek','NativeCountry','salary'), fill=FALSE, strip.white=T)
+```
+
+Firstly, we delete the educationNo and fnlwgt from the dataset for the further analysis.
+```{r}
+adult.train <- subset(adult.train, select = -c(fnlwgt, EducationNo))
+adult.test <- subset(adult.test, select = -c(fnlwgt, EducationNo))
+```
+
+Some of the variables are not numerical and stored as text. As we are going to be modifying text directly, we need to convert them to character strings.
+```{r}
+adult.train$workclass <- as.character(adult.train$workclass)
+adult.train$education <- as.character(adult.train$education)
+adult.train$MaritalStatus <- as.character(adult.train$MaritalStatus)
+adult.train$occupation <- as.character(adult.train$occupation)
+adult.train$race <- as.character(adult.train$race)
+adult.train$NativeCountry <- as.character(adult.train$NativeCountry)
+
+adult.test$workclass <- as.character(adult.test$workclass)
+adult.test$education <- as.character(adult.test$education)
+adult.test$MaritalStatus <- as.character(adult.test$MaritalStatus)
+adult.test$occupation <- as.character(adult.test$occupation)
+adult.test$race <- as.character(adult.test$race)
+adult.test$NativeCountry <- as.character(adult.test$NativeCountry)
+```
+
+Now, we delete the missing values from both training set and testing set for further analysis.
+```{r}
+is.na(adult.train) <- adult.train == '?'
+adult.train <- na.omit(adult.train)
+
+is.na(adult.test) <- adult.test == '?'
+adult.test <- na.omit(adult.test)
+```
+
+In this step, we turn the catagorial variables to factors. Also, we convert the response variable salary to "0" and "1"s.
+```{r}
+adult.train$MaritalStatus <- factor(adult.train$MaritalStatus)
+adult.train$education <- factor(adult.train$education)
+adult.train$NativeCountry <- factor(adult.train$NativeCountry)
+adult.train$workclass <- factor(adult.train$workclass)
+adult.train$occupation <- factor(adult.train$occupation)
+adult.train$race <- factor(adult.train$race)
+adult.train$sex <-  factor(adult.train$sex)
+adult.train$relationship <- factor(adult.train$relationship)
+adult.train$salary <- as.factor(ifelse(adult.train$salary == adult.train$salary[1], 0, 1))
+
+adult.test$MaritalStatus <- factor(adult.test$MaritalStatus)
+adult.test$education <- factor(adult.test$education)
+adult.test$NativeCountry <- factor(adult.test$NativeCountry)
+adult.test$workclass <- factor(adult.test$workclass)
+adult.test$occupation <- factor(adult.test$occupation)
+adult.test$race <- factor(adult.test$race)
+adult.test$sex <-  factor(adult.test$sex)
+adult.test$relationship <- factor(adult.test$relationship)
+adult.test$salary <- as.factor(ifelse(adult.test$salary == adult.test$salary[1], 0, 1))
+```
+
+Now, we split the training set to the train and validation set.
+```{r}
+sample <- rbinom(dim(adult.train)[1],1,.3)
+trainset <- adult.train[sample==0,]
+age <- trainset$age
+CapitalGain <- trainset$CapitalGain
+CapitalLoss <- trainset$CapitalLoss
+HoursPerWeek <- trainset$HoursPerWeek
+valset <- adult.train[sample==1,]
+```
+
+In logistic regression, we try different values for lambda for Lasso regulization.
+```{r}
+library(glmnet)
+levels(adult.test$workclass) <- levels(adult.train$workclass)
+levels(adult.test$education) <- levels(adult.train$education)
+levels(adult.test$MaritalStatus) <- levels(adult.train$MaritalStatus)
+levels(adult.test$occupation) <- levels(adult.train$occupation)
+levels(adult.test$relationship) <- levels(adult.train$relationship)
+levels(adult.test$race) <- levels(adult.train$race)
+levels(adult.test$sex) <- levels(adult.train$sex)
+levels(adult.test$NativeCountry) <- levels(adult.train$NativeCountry)
+logit.fit <- glm(salary ~.-relationship, family = binomial(logit), data = trainset)
+pred <- predict(logit.fit, newdata = valset, type="response")
+x <- as.matrix(data.frame(age, CapitalGain, CapitalLoss, HoursPerWeek))
+glmmod <- glmnet(x, y=as.factor(trainset$salary), alpha=1, family="binomial")
+glmmod
+plot(glmmod, xvar="lambda")
+glmond1 <- glmnet(x, y=as.factor(trainset$salary), alpha=0.5, family="binomial")
+glmond1
+plot(glmond1, xvar="lambda")
+glmond2 <- glmnet(x, y=as.factor(trainset$salary), alpha=0.7, family="binomial")
+glmond2
+plot(glmond2, xvar="lambda")
+```
+
+In random forest, we try various numbers for trees.
+```{r}
+library(randomForest)
+rf.fit <-randomForest(salary~., data = adult.train, mtry=2, ntree=1000, keep.forest=TRUE, importance=TRUE, test = adult.test)
+plot(rf.fit)
+phat <- predict(rf.fit, adult.test, type = "prob")[,2]
+sapply(adult.train, class)
+sapply(adult.test, class)
+levels(adult.test$workclass) <- levels(adult.train$workclass)
+levels(adult.test$education) <- levels(adult.train$education)
+levels(adult.test$MaritalStatus) <- levels(adult.train$MaritalStatus)
+levels(adult.test$occupation) <- levels(adult.train$occupation)
+levels(adult.test$relationship) <- levels(adult.train$relationship)
+levels(adult.test$race) <- levels(adult.train$race)
+levels(adult.test$sex) <- levels(adult.train$sex)
+levels(adult.test$NativeCountry) <- levels(adult.train$NativeCountry)
+phat <- predict(rf.fit, adult.test, type = "prob")[,2]
+table(ifelse(phat > 0.5, 1, 0), adult.test$salary)
+
+rf.fit <-randomForest(salary~., data = adult.train, mtry=2, ntree=100, keep.forest=TRUE, importance=TRUE, test = adult.test)
+plot(rf.fit)
+phat <- predict(rf.fit, adult.test, type = "prob")[,2]
+table(ifelse(phat > 0.5, 1, 0), adult.test$salary)
+
+rf.fit <-randomForest(salary~., data = adult.train, mtry=2, ntree=500, keep.forest=TRUE, importance=TRUE, test = adult.test)
+plot(rf.fit)
+phat <- predict(rf.fit, adult.test, type = "prob")[,2]
+table(ifelse(phat > 0.5, 1, 0), adult.test$salary)
+```
+
+In GBM, we use xgboost method for GBM.
+```{r}
+library(readr)
+library(xgboost)
+library(ROCR)
+
+set.seed(123)
+N <- nrow(adult.train)
+idx <- sample(1:N, 0.6*N)
+d_train <- adult.train[idx,]
+d_test <- adult.train[-idx,]
+
+X <- Matrix::sparse.model.matrix(salary ~ . - 1, data = adult.train)
+X_train <- X[idx,]
+X_test <- X[-idx,]
+
+dxgb_train <- xgb.DMatrix(data = X_train, label = ifelse(d_train$salary=='Y', 0, 1))
+system.time({
+  n_proc <- parallel::detectCores()
+  md <- xgb.train(data = dxgb_train, nthread = n_proc, objective = "binary:logistic", 
+                  nround = 300, max_depth = 20, eta = 0.1)
+})
+  
+
+phat <- predict(md, newdata = X_test)
+
+rocr_pred <- prediction(phat, d_test$salary)
+performance(rocr_pred, "auc")@y.values[[1]]
+```
